@@ -1,32 +1,34 @@
 import User from "../models/user.model.js";
 import jwt from 'jsonwebtoken';
 import {redis} from '../db/reddis.js'
+import { set } from "mongoose";
 const generateToken=(userId)=>{
-    const accessToken=jwt.sign({id:userId},process.env.access_token,{
-        expiresIn:'15m'
-    });
-    const refreshToken=jwt.sign({id:userId},process.env.refresh_token,{
-        expiresIn:'7d'
-    });
-    return {accessToken,refreshToken};
+  const accesstoken=jwt.sign({_id:userId},process.env.access_token,{
+    expiresIn:'15m'
+  });
+  const refreshtoken=jwt.sign({_id:userId},process.env.refresh_token,{
+    expiresIn:'7d'
+  });
+ return {accesstoken,refreshtoken};
 }
 export const storefreshToken=async(userId,refreshToken)=>{ 
-      await redis.set(`refresh_token:${userId}`,refreshToken,"EX",7*24*60*60);
+    console.log('yaha pe hu')
+    await redis.set(`refresh_token:${userId}`,refreshToken,"EX",7*24*60*60);
      
 }
-const setCookies=(res,accessToken,refreshToken)=>{
-    res.cookie("accessToken",accessToken,{
-        httpOnly:true,
-        secure:process.env.NODE_ENV==="production",
-        sameSite:"strict",
-        maxAge:15*60*1000 // 15minutes 
-    });
-    res.cookie("refreshToken",refreshToken,{
-        httpOnly:true,
-        secure:process.env.NODE_ENV==="production",
-        sameSite:"strict",
-        maxAge:7*24*60*60*1000// 7 days
-    })
+const setCookies=(res,accesstoken,refreshtoken)=>{
+ res.cookie("accessToken",accesstoken,{
+    httpOnly:true,
+    sameSite:"Strict",
+    secure:process.env.NODE_ENV==="production",
+    maxAge:15*60*1000
+ });
+ res.cookie("refreshToken",refreshtoken,{
+    httpOnly:true,
+    sameSite:"Strict",
+    secure:process.env.NODE_ENV==="production",
+    maxAge:7*24*60*1000
+ })
 }
 export const authsignup=async(req,res)=>{
     // check whether entered credentials are valid or not
@@ -34,21 +36,22 @@ export const authsignup=async(req,res)=>{
     // generate both refresh and access token
     // store refresh token in reddis
     // and then set setcookies for refresh and access token both
-    const {email,password,name}=req.body;
     try {
-         const userExists=await User.findOne({email});
-         if(userExists){
-            return res.status(400).json({message:"Email already exists",success:false});
-         }
-         const user=await User.create({name,email,password});
-         const {accessToken,refreshToken} = generateToken(user._id);
-         await storefreshToken(user._id,refreshToken);
-         setCookies(res,accessToken,refreshToken);
-         res.status(201).json({message:"User created successfully"});
+        const {email,password}=req.body;
+        if([email,password].some((field)=>field?.trim()==="")){
+            res.status(400).json({message:"Invalid credentials"});
+        }
+        const user=await User.findOne({email});
+        if(user && (await user.comparePassword(password))){
+            const {accessToken,refreshToken}=generateToken(user._id);
+            await storefreshToken(user._id,refreshToken);
+            setCookies(res,accessToken,refreshToken);
+            res.status(201).json({message:"User registered successfully",success:false});
+        }
+        res.status(400).json({message:"Invalid credentials",success:false});
     } catch (error) {
         console.log(error);
-        return res.status(400).json({message:error.message,success:false});
-
+        res.status(500).json({message:error.message,success:false});
     }
 }
 
@@ -62,14 +65,18 @@ export const authlogin=async(req,res)=>{
         if(user && (await user.comparePassword(password))){
             const {accessToken,refreshToken}=generateToken(user._id);
             await storefreshToken(user._id,refreshToken);
-            setCookies(accessToken,refreshToken);
-            res.status(200).json({
+           
+            setCookies(res,accessToken,refreshToken);
+            res.status(201).json({
                 _id:user._id,
                 name:user.name,
                 email:user.email,
                 role:user.role,
             });
         }
+        else{
+            res.status(400).json({message:"Invalid credentials",success:false});
+        }   
     } catch (error) {
         console.log("Login error:=>",error);
         res.status(500).json({message:error.message});
@@ -85,7 +92,34 @@ export const authlogout=async(req,res)=>{
             res.clearCookie("accessToken");
             res.clearCookie("refreshToken");
         }
+        res.status(200).json({message:"Logged out successfully"});
     } catch (error) {
         res.status(500).json({message:error.message});
+    }
+}
+export const refreshToken=async(req,res)=>{
+    try {
+        const refreshtoken=req.cookies.refreshToken;
+        if(!refreshtoken) return  res.status(400).json({message:"No token data found"});
+        const decode=jwt.verify(refreshtoken,process.env.refresh_token);
+        const storedToken=redis.get(`refresh_token:${decode._id}`,refreshtoken);
+        if(refreshtoken!==storedToken) res.status(400).json({message:"No match found"});
+        const accessToken=jwt.sign({userId:decode._id},process.env.access_token,{
+            expiresIn:'15m'
+        });
+        const refreshToken=jwt.sign({userId:decode._id},process.env.refresh_token,{
+            expiresIn:'7d'
+        });
+        setCookies(res,accessToken,refreshtoken);
+        storefreshToken(decode._id,refreshtoken)
+       res.status(200).json({
+        _id:decode._id,
+        name:decode.name,
+        email:decode.eamil,
+        role:decode.role,
+       });
+       res.status(201).json({message:"Token refreshed successfully"});
+    } catch (error) {
+        res.status(500).json({message:error.message,success:false});
     }
 }
