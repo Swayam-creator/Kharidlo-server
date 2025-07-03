@@ -1,7 +1,6 @@
 import User from "../models/user.model.js";
 import jwt from 'jsonwebtoken';
-import {redis} from '../db/reddis.js'
-import { set } from "mongoose";
+import {redis} from '../config/reddis.js'
 const generateToken=(userId)=>{
   const accesstoken=jwt.sign({_id:userId},process.env.access_token,{
     expiresIn:'15m'
@@ -12,7 +11,7 @@ const generateToken=(userId)=>{
  return {accesstoken,refreshtoken};
 }
 export const storefreshToken=async(userId,refreshToken)=>{ 
-    console.log('yaha pe hu')
+    // console.log('yaha pe hu')
     await redis.set(`refresh_token:${userId}`,refreshToken,"EX",7*24*60*60);
      
 }
@@ -97,7 +96,8 @@ export const authlogout=async(req,res)=>{
         res.status(500).json({message:error.message});
     }
 }
-export const refreshToken=async(req,res)=>{
+// this helps in increasing the validity of access token
+export const refreshTokenHandler=async(req,res)=>{
     try {
         const refreshtoken=req.cookies.refreshToken;
         if(!refreshtoken) return  res.status(400).json({message:"No token data found"});
@@ -110,8 +110,8 @@ export const refreshToken=async(req,res)=>{
         const refreshToken=jwt.sign({userId:decode._id},process.env.refresh_token,{
             expiresIn:'7d'
         });
-        setCookies(res,accessToken,refreshtoken);
-        storefreshToken(decode._id,refreshtoken)
+        setCookies(res,accessToken,refreshToken);
+        storefreshToken(decode._id,refreshToken)
        res.status(200).json({
         _id:decode._id,
         name:decode.name,
