@@ -36,18 +36,26 @@ export const authsignup=async(req,res)=>{
     // store refresh token in reddis
     // and then set setcookies for refresh and access token both
     try {
-        const {email,password}=req.body;
-        if([email,password].some((field)=>field?.trim()==="")){
+        const {email,password,name}=req.body;
+        if([email,password,name].some((field)=>field?.trim()==="")){
             res.status(400).json({message:"Invalid credentials"});
         }
-        const user=await User.findOne({email});
-        if(user && (await user.comparePassword(password))){
-            const {accessToken,refreshToken}=generateToken(user._id);
+        const userexist=await User.findOne({email});
+        if(userexist){
+            return res.status(400).json({message:"Email id already exists"});
+        }
+        const user=await User.create({name,email,password});
+        const {accessToken,refreshToken}=generateToken(user._id);
             await storefreshToken(user._id,refreshToken);
             setCookies(res,accessToken,refreshToken);
-            res.status(201).json({message:"User registered successfully",success:false});
-        }
-        res.status(400).json({message:"Invalid credentials",success:false});
+            res.status(201).json({
+                message:"User registered successfully",
+               _id:user._id, 
+                name:user.name,
+                email:user.email,
+                role:user.role
+                });
+      
     } catch (error) {
         console.log(error);
         res.status(500).json({message:error.message,success:false});
@@ -57,7 +65,7 @@ export const authsignup=async(req,res)=>{
 export const authlogin=async(req,res)=>{
     try {
         const {email,password}=req.body;
-        if([email,password].some((field)=>field?.trim()==="")){
+        if([email,password,name].some((field)=>field?.trim()==="")){
             res.status(400).json({message:"All fields are required",success:false});
         }
         const user=await User.findOne({email});
@@ -113,12 +121,12 @@ export const refreshTokenHandler=async(req,res)=>{
         setCookies(res,accessToken,refreshToken);
         storefreshToken(decode._id,refreshToken)
        res.status(200).json({
+        message:"Token refreshed successfully",
         _id:decode._id,
         name:decode.name,
         email:decode.eamil,
         role:decode.role,
        });
-       res.status(201).json({message:"Token refreshed successfully"});
     } catch (error) {
         res.status(500).json({message:error.message,success:false});
     }

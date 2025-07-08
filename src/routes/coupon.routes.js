@@ -4,7 +4,7 @@ import { createCouponHandler, deleteCouponHandler, getCouponHandler, validateCou
 
 const router=express.Router();
 router.post('/create-coupon',protectedRoute,adminRoute,createCouponHandler);
-router.delete('/delete-coupon',protectedRoute,adminRoute,deleteCouponHandler);
+router.delete('/delete-coupon/:id',protectedRoute,adminRoute,deleteCouponHandler);
 router.get('/',protectedRoute,getCouponHandler);
 router.post('/validate',protectedRoute,validateCouponHandler);
 

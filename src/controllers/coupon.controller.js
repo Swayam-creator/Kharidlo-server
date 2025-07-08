@@ -1,14 +1,19 @@
 import { coupon } from "../models/coupon.model.js";
 export const createCouponHandler=async(req,res)=>{
     try {
-        
+        const {couponcode,discountPercentage,availableCoupons,expiryTime}=req.body;
+        const newCoupon=new coupon({couponcode,discountPercentage,availableCoupons,expiryTime,userId:req.user._id});
+        await newCoupon.save();
+        res.status(201).json(newCoupon);
     } catch (error) {
     res.status(500).json({message:error.message,success:false});   
     }
 }
 export const deleteCouponHandler=async(req,res)=>{
     try {
-        
+        const couponId=req.params.id;
+        await coupon.findByIdAndDelete(couponId);
+        res.status(200).json({message:"Coupon deleted successfully"});
     } catch (error) {
     res.status(500).json({message:error.message,success:false});
     }
